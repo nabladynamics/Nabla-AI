@@ -41,6 +41,19 @@ class Settings(BaseSettings):
     # the reference registry. Default assumes the service runs from backend/.
     repo_root: Path = Path("..")
 
+    # CORS allow-list for the browser frontend (comma-separated origins, or "*").
+    # Local dev / compose serve the SPA same-origin (Vite proxy / nginx) so CORS
+    # is moot there; this matters once the frontend is on Vercel and the backend
+    # on Railway (cross-origin). Default "*" for the Phase-0 demo — LOCK THIS
+    # DOWN to the real Vercel domain (e.g. "https://nabla.vercel.app") via
+    # NABLA_ALLOWED_ORIGINS once it is known.
+    allowed_origins: str = "*"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parsed CORS allow-list. "*" stays a single wildcard entry."""
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:

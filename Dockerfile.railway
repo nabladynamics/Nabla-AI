@@ -1,0 +1,77 @@
+# Nabla AI — Railway single-container image: FastAPI backend + the C++ solver
+# binary on ONE machine (the solver runs as a backend subprocess and streams
+# telemetry over WebSocket, so they cannot be split across hosts).
+#
+# This mirrors docker/backend.Dockerfile (the local compose image); the only
+# deploy-specific differences are (1) uvicorn binds Railway's injected $PORT,
+# not a hardcoded 8000, and (2) the data dir note below. Keep the two build
+# stages in lockstep.
+#
+#   docker build -f Dockerfile.railway -t nabla-railway .
+#   docker run -e PORT=8000 -p 8000:8000 nabla-railway
+
+# --- stage 1: build the solver core (Release) --------------------------------
+FROM debian:bookworm-slim AS core-build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc g++ cmake make libhdf5-dev \
+    && rm -rf /var/lib/apt/lists/*
+ARG NABLA_GIT_SHA=unknown
+WORKDIR /src
+COPY core/ core/
+RUN cmake -S core -B build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DNABLA_BUILD_TESTS=OFF \
+        -DNABLA_GIT_SHA="${NABLA_GIT_SHA}" \
+    && cmake --build build -j"$(nproc)" \
+    && strip build/nabla_solve
+
+# --- stage 2: FastAPI runtime with the solver baked in -----------------------
+FROM python:3.12-slim-bookworm
+# libhdf5: solver checkpoint I/O.  curl: /health probing / debugging.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libhdf5-103-1 curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+WORKDIR /app/backend
+# Dependency layer first (cached until the lockfile changes).
+COPY backend/pyproject.toml backend/uv.lock backend/README.md ./
+RUN uv sync --frozen --no-dev --no-install-project
+COPY backend/app ./app
+RUN uv sync --frozen --no-dev
+# The validation harness powers POST /api/runs/{id}/report (stdlib-only).
+COPY validation /app/validation
+
+# The solver binary lives INSIDE this image, behind the backend API — it is
+# never exposed or shipped on its own (trade-secret boundary, ADR-0001).
+COPY --from=core-build /src/build/nabla_solve /usr/local/bin/nabla_solve
+
+ARG NABLA_GIT_SHA=unknown
+# Everything the backend needs comes from the environment (same code runs
+# locally and here). NABLA_SOLVER_COMMAND points at the binary copied above;
+# NABLA_ALLOWED_ORIGINS defaults to "*" — set it to the Vercel domain in the
+# Railway dashboard once known.
+ENV NABLA_SOLVER_COMMAND=/usr/local/bin/nabla_solve \
+    NABLA_DATA_DIR=/data \
+    NABLA_REPO_ROOT=/app \
+    NABLA_GIT_SHA=${NABLA_GIT_SHA} \
+    NABLA_ALLOWED_ORIGINS="*" \
+    PATH="/app/backend/.venv/bin:${PATH}"
+
+# Writable data dir for SQLite + run artifacts. NOTE: this is container-local
+# and EPHEMERAL — it is wiped on every redeploy. If runs must survive
+# redeploys, attach a Railway volume mounted at /data (next step; no code
+# change needed, the path is already env-driven via NABLA_DATA_DIR).
+RUN useradd --system --home-dir /app --shell /usr/sbin/nologin nabla \
+    && mkdir -p /data \
+    && chown -R nabla:nabla /data /app
+USER nabla
+
+# Railway injects $PORT and routes external traffic to it; never hardcode it.
+# A CFD run is a background subprocess (HTTP returns immediately, the client
+# follows progress over WebSocket), so there is no per-request work that a
+# platform request-timeout could kill. `exec` makes uvicorn PID 1 so Railway's
+# SIGTERM on redeploy shuts it down cleanly. --ws wsproto avoids the default
+# impl's 8 KiB handshake-header limit.
+ENV PORT=8000
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --ws wsproto"]

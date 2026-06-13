@@ -1,6 +1,8 @@
 // Typed client for the orchestration backend (/api/*). The frontend talks
 // ONLY to the backend over HTTP — never to the solver core (CLAUDE.md rule 1).
 
+import { apiPath } from './config'
+
 export type RunStatus =
   | 'created'
   | 'meshing'
@@ -140,11 +142,11 @@ async function check<T>(response: Response): Promise<T> {
 }
 
 export async function listRuns(): Promise<RunInfo[]> {
-  return check(await fetch('/api/runs'))
+  return check(await fetch(apiPath('/api/runs')))
 }
 
 export async function getRun(id: string): Promise<RunInfo> {
-  return check(await fetch(`/api/runs/${id}`))
+  return check(await fetch(apiPath(`/api/runs/${id}`)))
 }
 
 export async function createRun(
@@ -156,12 +158,12 @@ export async function createRun(
   form.append('stl', stl)
   form.append('config', JSON.stringify(config))
   form.append('name', name)
-  return check(await fetch('/api/runs', { method: 'POST', body: form }))
+  return check(await fetch(apiPath('/api/runs'), { method: 'POST', body: form }))
 }
 
 export async function startRun(id: string, config?: CaseConfig): Promise<RunInfo> {
   return check(
-    await fetch(`/api/runs/${id}/start`, {
+    await fetch(apiPath(`/api/runs/${id}/start`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config ? { config } : {}),
@@ -175,7 +177,7 @@ export async function askCopilot(
   history: ChatTurn[],
 ): Promise<AskResponse> {
   return check(
-    await fetch(`/api/runs/${id}/ai/ask`, {
+    await fetch(apiPath(`/api/runs/${id}/ai/ask`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, history }),
@@ -184,11 +186,11 @@ export async function askCopilot(
 }
 
 export async function pauseRun(id: string): Promise<RunInfo> {
-  return check(await fetch(`/api/runs/${id}/pause`, { method: 'POST' }))
+  return check(await fetch(apiPath(`/api/runs/${id}/pause`), { method: 'POST' }))
 }
 
 export async function resumeRun(id: string): Promise<RunInfo> {
-  return check(await fetch(`/api/runs/${id}/resume`, { method: 'POST' }))
+  return check(await fetch(apiPath(`/api/runs/${id}/resume`), { method: 'POST' }))
 }
 
 export interface SliceCell {
@@ -215,7 +217,7 @@ export async function fetchFidelitySlice(
   axis: 'y' | 'z',
   frac: number,
 ): Promise<SliceResponse> {
-  return check(await fetch(`/api/runs/${runId}/fidelity-slice?axis=${axis}&frac=${frac}`))
+  return check(await fetch(apiPath(`/api/runs/${runId}/fidelity-slice?axis=${axis}&frac=${frac}`)))
 }
 
 // ---- post-simulation -----------------------------------------------------
@@ -300,31 +302,31 @@ export interface AnalysisResponse {
 export async function listSnapshots(
   runId: string,
 ): Promise<{ steps: number[]; has_final: boolean }> {
-  return check(await fetch(`/api/runs/${runId}/snapshots`))
+  return check(await fetch(apiPath(`/api/runs/${runId}/snapshots`)))
 }
 
 export async function fetchField(runId: string, step: number, stride = 0): Promise<FieldBundle> {
-  return check(await fetch(`/api/runs/${runId}/field?step=${step}&stride=${stride}`))
+  return check(await fetch(apiPath(`/api/runs/${runId}/field?step=${step}&stride=${stride}`)))
 }
 
 export async function fetchAnalysis(runId: string, window = 0.5): Promise<AnalysisResponse> {
-  return check(await fetch(`/api/runs/${runId}/analysis?window=${window}`))
+  return check(await fetch(apiPath(`/api/runs/${runId}/analysis?window=${window}`)))
 }
 
 export async function generateReport(runId: string): Promise<{ artifact: string }> {
-  return check(await fetch(`/api/runs/${runId}/report`, { method: 'POST' }))
+  return check(await fetch(apiPath(`/api/runs/${runId}/report`), { method: 'POST' }))
 }
 
 export function forcesCsvUrl(runId: string): string {
-  return `/api/runs/${runId}/forces.csv`
+  return apiPath(`/api/runs/${runId}/forces.csv`)
 }
 
 export function bundleZipUrl(runId: string, suffix = '.vtu'): string {
-  return `/api/runs/${runId}/bundle.zip?suffix=${suffix}`
+  return apiPath(`/api/runs/${runId}/bundle.zip?suffix=${suffix}`)
 }
 
 export function artifactUrl(runId: string, name: string): string {
-  return `/api/runs/${runId}/artifacts/${name}`
+  return apiPath(`/api/runs/${runId}/artifacts/${name}`)
 }
 
 export async function fetchArtifactJson<T>(runId: string, name: string): Promise<T> {

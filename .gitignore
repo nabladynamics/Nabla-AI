@@ -20,7 +20,9 @@ backend/.venv/
 .ruff_cache/
 .cache/
 
-# Local env / IPC scratch
+# Local env / IPC scratch — never commit real env files; templates are tracked.
 .env
+.env.*
+!.env.example
 .nabla-work/
 validation/report.md

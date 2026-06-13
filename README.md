@@ -123,6 +123,38 @@ as TODO — the harness **never fabricates reference values**.
 Through the product instead: `POST /api/runs` (STL + config) → `/start` →
 live telemetry on `/sim` → `/post` Exports tab → *Generate report*.
 
+## Deployment (hosted demo)
+
+Two targets. `docker compose up` (above) remains the local/on-prem path and is
+unchanged; the same backend code runs in all three.
+
+**Backend + solver → Railway** (one container; the solver runs as a backend
+subprocess and streams telemetry over WebSocket, so they must share a machine —
+and the solver core is never exposed on its own, per
+[ADR-0001](docs/adr/0001-local-first-client-server-architecture.md)). The
+backend cannot run on Vercel: Vercel is serverless with short request timeouts,
+while a CFD run is minutes of CPU in a long-running subprocess.
+
+- Dockerfile: [`Dockerfile.railway`](Dockerfile.railway) (config in
+  [`railway.json`](railway.json) — `/health` healthcheck, restart-on-failure).
+- Railway injects `PORT`; uvicorn binds `0.0.0.0:$PORT` (never hardcoded).
+- HTTP requests return immediately (jobs run in the background); nothing a
+  request-timeout could kill. Size the service for multi-minute CPU runs.
+- Set `NABLA_ALLOWED_ORIGINS` to the Vercel domain (defaults to `*` for the
+  demo). The Anthropic co-pilot key, if used, rides `ANTHROPIC_API_KEY`.
+- Run data (`/data`: SQLite + artifacts) is container-local and **ephemeral** —
+  wiped on redeploy. Attach a Railway volume at `/data` if runs must persist
+  (no code change; the path is env-driven).
+
+**Frontend → Vercel** (standalone static SPA):
+
+- **Root Directory = `frontend`** (not the repo root); framework preset **Vite**.
+- Set **`VITE_API_BASE_URL`** to the Railway backend URL (e.g.
+  `https://nabla-backend.up.railway.app`). Every REST call and the telemetry
+  WebSocket derive from it ([`frontend/src/config.ts`](frontend/src/config.ts));
+  unset = same-origin for local dev. SPA deep-links (`/pre`, `/sim`, `/post`)
+  are handled by [`frontend/vercel.json`](frontend/vercel.json).
+
 ## CI
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml):

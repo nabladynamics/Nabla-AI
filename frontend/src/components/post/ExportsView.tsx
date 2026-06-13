@@ -10,9 +10,10 @@ import {
   generateReport,
   type ArtifactInfo,
 } from '../../api'
+import { apiPath } from '../../config'
 
 async function listArtifacts(runId: string): Promise<ArtifactInfo[]> {
-  const response = await fetch(`/api/runs/${runId}/artifacts`)
+  const response = await fetch(apiPath(`/api/runs/${runId}/artifacts`))
   if (!response.ok) return []
   const body = (await response.json()) as { artifacts: ArtifactInfo[] }
   return body.artifacts

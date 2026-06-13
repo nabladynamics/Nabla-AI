@@ -5,6 +5,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 
+import { wsPath } from '../config'
+
 const RING_CAP = 5000
 const FLUSH_MS = 250
 const RECONNECT_MS = 1500
@@ -278,8 +280,7 @@ export function useTelemetry(runId: string | null): Telemetry {
 
     const connect = () => {
       reset() // server replays the snapshot from byte 0 on every connect
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      socket = new WebSocket(`${protocol}://${window.location.host}/api/runs/${runId}/telemetry`)
+      socket = new WebSocket(wsPath(`/api/runs/${runId}/telemetry`))
       socket.onopen = () => {
         data.current.connected = true
       }

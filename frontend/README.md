@@ -12,7 +12,17 @@ npm run dev          # http://localhost:5173
 ```
 
 `/api/*` is proxied to the backend on `http://localhost:8000` (see
-`vite.config.ts`).
+`vite.config.ts`), so no env var is needed for local dev.
+
+## Backend URL (`VITE_API_BASE_URL`)
+
+Every REST call and the telemetry WebSocket derive from one config module
+([`src/config.ts`](src/config.ts)). It reads the build-time env var
+`VITE_API_BASE_URL` (see [`.env.example`](.env.example)); unset means
+same-origin (dev proxy / compose nginx). On **Vercel**, set
+`VITE_API_BASE_URL` in the project's Environment Variables to the deployed
+Railway backend URL (e.g. `https://nabla-backend.up.railway.app`); the
+WebSocket URL is derived from it automatically (`https` → `wss`).
 
 ## Routes
 

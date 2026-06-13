@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai import ExperimentCopilot
 from app.config import Settings, get_settings
@@ -44,6 +45,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         summary="Physics-adaptive CFD platform — orchestration layer",
         lifespan=_lifespan,
     )
+    # Cross-origin access for the browser frontend (Vercel) hitting this backend
+    # (Railway). allow_credentials stays False so the "*" wildcard default is
+    # valid per the CORS spec (Phase 0 has no cookies/auth). Browser WebSocket
+    # handshakes are not subject to CORS preflight, so the telemetry socket is
+    # reachable from the same origins without extra config.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.state.settings = settings
     app.state.store = store
     app.state.artifacts = artifacts
