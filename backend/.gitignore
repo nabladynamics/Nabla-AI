@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# uv
+# (uv.lock IS committed for reproducible installs)
+
+# IPC working artifacts + run data (SQLite, artifacts)
+.nabla-work/
+.nabla-data/
+.env

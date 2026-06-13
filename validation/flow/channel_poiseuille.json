@@ -1,0 +1,12 @@
+{
+  "type": "channel",
+  "name": "poiseuille-re100",
+  "reynolds": 100,
+  "resolution": 48,
+  "nx": 96,
+  "cfl": 0.8,
+  "convection": "central",
+  "max_steps": 8000,
+  "steady_tol": 1e-7,
+  "run_dir": "run_channel"
+}

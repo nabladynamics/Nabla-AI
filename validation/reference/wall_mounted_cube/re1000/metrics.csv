@@ -1,0 +1,8 @@
+metric,value,uncertainty,units,source_id,notes
+cd_mean,TODO,,-,TODO,mean drag coefficient (frontal area h^2)
+cl_mean,TODO,,-,TODO,mean lift coefficient
+st,TODO,,-,TODO,Strouhal number f*h/U; verify whether the wake is steady at this Re before expecting a value
+upstream_separation_over_h,TODO,,-,TODO,horseshoe separation distance upstream of the front face / h
+reattachment_over_h,TODO,,-,TODO,floor-centerline reattachment length behind the rear face / h
+reverse_flow_volume_over_h3,TODO,,-,TODO,volume with mean u<0 normalized by h^3
+cp_front_center,TODO,,-,TODO,mean pressure coefficient at the front-face center

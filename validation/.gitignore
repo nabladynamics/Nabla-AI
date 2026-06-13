@@ -1,0 +1,6 @@
+# Generated artifacts
+report.md
+__pycache__/
+
+# Ladder run output (solver artifacts + generated reports)
+runs/

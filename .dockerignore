@@ -1,0 +1,31 @@
+# Build context filter for all images (context = repo root).
+# .git is excluded on purpose: the git SHA enters the build as the
+# NABLA_GIT_SHA build arg (see docker-compose.yml), not by copying the repo.
+.git
+.github
+.env
+.env.*
+!.env.example
+
+# Build outputs / caches
+core/build
+core/build-*
+backend/.venv
+backend/.nabla-data
+frontend/node_modules
+frontend/dist
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.cache
+*.tsbuildinfo
+
+# Local scratch / large run artifacts
+.nabla-work
+validation/report.md
+validation/runs
+*.vtu
+*.h5
+*.ckpt
+!core/examples/*.stl

@@ -1,0 +1,12 @@
+{
+  "type": "wall-mounted-cube",
+  "name": "wall-mounted-cube-re500",
+  "reynolds": 500,
+  "resolution": 6,
+  "cfl": 0.7,
+  "convection": "weno5",
+  "max_steps": 60,
+  "snapshot_every": 20,
+  "checkpoint_every": 20,
+  "run_dir": "run_cube"
+}

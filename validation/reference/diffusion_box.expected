@@ -1,0 +1,7 @@
+# Reference values for cases/diffusion_box.spec.
+# Baseline produced with nabla_solve 0.1.0. Tolerances are absolute.
+final_mean = 0.771974
+final_mean_tol = 1e-3
+final_max = 1.0
+final_max_tol = 1e-9
+stable = true

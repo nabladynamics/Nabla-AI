@@ -1,0 +1,3 @@
+# Structural invariants for cases/coarse_box.spec (no numeric tolerance needed).
+steps_run = 50
+stable = true

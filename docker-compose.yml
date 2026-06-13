@@ -1,0 +1,65 @@
+# Nabla AI — full stack, one command:  docker compose up
+#
+# This file IS the on-prem deployment story (ADR-0006): the same two services
+# that run on a laptop ship unchanged to an air-gapped aerospace/defense
+# machine. No cloud account, no external service. The solver binary lives
+# INSIDE the backend image, behind the orchestration API — it is never
+# exposed or distributed on its own.
+#
+# Configuration comes from the environment / a local .env file (see
+# .env.example; secrets are never committed):
+#   NABLA_BACKEND_PORT   host port for the API          (default 8000)
+#   NABLA_FRONTEND_PORT  host port for the web UI       (default 8080)
+#   NABLA_GIT_SHA        build provenance, stamped into every result file
+#   ANTHROPIC_API_KEY    optional, enables the AI co-pilot
+
+name: nabla
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        NABLA_GIT_SHA: ${NABLA_GIT_SHA:-unknown}
+    image: nabla-backend:local
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - nabla-data:/data
+    ports:
+      - "${NABLA_BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    image: nabla-frontend:local
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${NABLA_FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+
+  # Solver-core artifact image (CI / standalone delivery). Not part of the
+  # running stack — build it explicitly with:
+  #   docker compose --profile tools build core
+  core:
+    build:
+      context: .
+      dockerfile: docker/core.Dockerfile
+      args:
+        NABLA_GIT_SHA: ${NABLA_GIT_SHA:-unknown}
+    image: nabla-core:local
+    profiles: ["tools"]
+
+volumes:
+  nabla-data:

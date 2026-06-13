@@ -1,0 +1,26 @@
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Build outputs (each subproject also has its own .gitignore)
+core/build/
+core/build-*/
+frontend/node_modules/
+frontend/dist/
+backend/.venv/
+**/__pycache__/
+*.tsbuildinfo
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.cache/
+
+# Local env / IPC scratch
+.env
+.nabla-work/
+validation/report.md

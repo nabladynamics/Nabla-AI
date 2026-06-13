@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core (C++20)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install HDF5 (checkpoint support)
+        run: sudo apt-get update && sudo apt-get install -y libhdf5-dev
+      - name: Toolchain versions
+        run: |
+          cmake --version
+          c++ --version
+      - name: Configure (Release, tests on)
+        run: cmake -S core -B core/build -DCMAKE_BUILD_TYPE=Release -DNABLA_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build core/build -j
+      - name: Smoke test (--version)
+        run: ./core/build/nabla_solve --version
+      - name: Unit tests
+        run: ctest --test-dir core/build --output-on-failure
+      - name: Mesh demo smoke test (writes .vtu + checkpoint)
+        run: ./core/build/nabla_mesh_demo /tmp/nabla_demo.vtu /tmp/nabla_demo.h5
+      - name: Ingest smoke test (STL -> meshed .vtu + geometry JSON)
+        run: ./core/build/nabla_solve ingest core/examples/cube.stl --case wall-mounted-cube --out-vtu /tmp/cube.vtu --report /tmp/cube.geometry.json
+      - name: Flow validations (lid cavity vs Ghia, Poiseuille; <=2% L2)
+        run: python3 validation/flow/validate_flow.py --solver ./core/build/nabla_solve
+      - name: Adaptive smoke test (audited AMR run on the cube)
+        run: ./core/build/nabla_solve adapt --res 4 --max-level 4 --base-level 2 --warmup 3 --steps 3 --run-dir /tmp/run_adapt
+
+  validation-harness:
+    name: validation harness (stdlib Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Post-processing unit tests
+        run: python3 -m unittest discover -s validation/tests -t .
+
+  backend:
+    name: backend (Python 3.12)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+      - name: Sync dependencies
+        run: uv sync
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Type-check (mypy --strict)
+        run: uv run mypy
+      - name: Tests (pytest)
+        run: uv run pytest
+
+  frontend:
+    name: frontend (React/TS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        run: npm install
+      - name: Lint (ESLint)
+        run: npm run lint
+      - name: Type-check (tsc)
+        run: npm run typecheck
+
+  docker-smoke:
+    name: docker smoke (compose end-to-end)
+    runs-on: ubuntu-latest
+    env:
+      RES: "5" # miniature case: ~34k cells, 50 steps
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stamp build provenance
+        run: echo "NABLA_GIT_SHA=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
+
+      - name: Build all images (core artifact + stack)
+        run: docker compose --profile tools build
+
+      - name: Solver artifact image reports its provenance
+        run: |
+          docker run --rm nabla-core:local --version
+          docker run --rm nabla-core:local --version | grep -q "git ${NABLA_GIT_SHA}"
+
+      - name: Start the stack
+        run: docker compose up -d
+
+      - name: Wait for backend health (provenance-stamped)
+        run: |
+          for _ in $(seq 1 60); do
+            curl -fsS localhost:8000/health >/dev/null 2>&1 && break
+            sleep 2
+          done
+          curl -fsS localhost:8000/health
+          curl -fsS localhost:8000/health | grep -q "\"git_sha\":\"${NABLA_GIT_SHA}\""
+
+      - name: Run a 50-step miniature cube case through the API
+        run: |
+          RUN_ID=$(curl -fsS -X POST localhost:8000/api/runs \
+            -F "stl=@core/examples/cube.stl;type=model/stl" \
+            -F "config={\"type\":\"wall-mounted-cube\",\"reynolds\":500,\"resolution\":${RES},\"max_steps\":50,\"snapshot_every\":10,\"checkpoint_every\":25}" \
+            -F "name=ci-smoke" | python3 -c "import json,sys; print(json.load(sys.stdin)['run']['id'])")
+          echo "RUN_ID=${RUN_ID}" >> "$GITHUB_ENV"
+          curl -fsS -X POST "localhost:8000/api/runs/${RUN_ID}/start" >/dev/null
+          STATUS=running
+          for _ in $(seq 1 120); do
+            STATUS=$(curl -fsS "localhost:8000/api/runs/${RUN_ID}" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])")
+            [ "$STATUS" = completed ] && break
+            [ "$STATUS" = failed ] && { echo "run failed"; exit 1; }
+            sleep 5
+          done
+          [ "$STATUS" = completed ]
+
+      - name: Diagnostics carry the build provenance meta line
+        run: |
+          curl -fsS "localhost:8000/api/runs/${RUN_ID}/artifacts/diagnostics.jsonl" | head -1
+          curl -fsS "localhost:8000/api/runs/${RUN_ID}/artifacts/diagnostics.jsonl" \
+            | head -1 | grep -q "\"git_sha\":\"${NABLA_GIT_SHA}\""
+
+      - name: Report generates through the validation harness
+        run: |
+          curl -fsS -X POST "localhost:8000/api/runs/${RUN_ID}/report"
+          curl -fsS "localhost:8000/api/runs/${RUN_ID}/artifacts/report.html" \
+            | grep -q "Phase 0 Validation Report"
+
+      - name: Frontend serves the SPA and proxies the API
+        run: |
+          curl -fsS localhost:8080/ | grep -qi "<div id=\"root\""
+          curl -fsS localhost:8080/api/health | grep -q nabla-backend
+
+      - name: Stack logs (on failure)
+        if: failure()
+        run: docker compose logs --tail 200
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v

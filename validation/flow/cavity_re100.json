@@ -1,0 +1,11 @@
+{
+  "type": "lid-cavity",
+  "name": "lid-cavity-re100",
+  "reynolds": 100,
+  "resolution": 48,
+  "cfl": 0.8,
+  "convection": "central",
+  "max_steps": 8000,
+  "steady_tol": 1e-5,
+  "run_dir": "run_cavity"
+}
