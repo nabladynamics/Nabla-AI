@@ -7,7 +7,7 @@ NS-consistency gate, and fully audited* — wrapped in a local-first web product
 > Architecture rules live in [`CLAUDE.md`](CLAUDE.md); decisions and rationale
 > in [docs/adr/](docs/adr/).
 
-## Architecture
+## Architecture 
 
 Three layers, three processes, one rule: each layer talks only to its
 immediate neighbor ([ADR-0001](docs/adr/0001-local-first-client-server-architecture.md)).
