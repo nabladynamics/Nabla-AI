@@ -43,7 +43,14 @@ export function Post() {
     setFieldError(null)
     if (!runId) return
     void listSnapshots(runId)
-      .then((response) => setSteps(response.steps))
+      .then((response) => {
+        setSteps(response.steps)
+        // A finished run has final.vtu -> show it (-1). A run still in progress
+        // has no final yet, so land on the latest snapshot instead of erroring.
+        if (!response.has_final && response.steps.length > 0) {
+          setCurrentStep(response.steps[response.steps.length - 1])
+        }
+      })
       .catch(() => setSteps([]))
   }, [runId])
 

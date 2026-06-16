@@ -45,26 +45,42 @@ class SnapshotList(BaseModel):
     has_final: bool
 
 
+def _snapshot_steps(ws: Path) -> list[int]:
+    return sorted(
+        int(m.group(1)) for p in ws.glob("snapshot_*.vtu") if (m := _SNAP_RE.search(p.name))
+    )
+
+
 @router.get("/{run_id}/snapshots", response_model=SnapshotList)
 def list_snapshots(service: ServiceDep, run_id: str) -> SnapshotList:
     ws = _workspace(service, run_id)
-    steps = sorted(
-        int(m.group(1)) for p in ws.glob("snapshot_*.vtu") if (m := _SNAP_RE.search(p.name))
-    )
-    return SnapshotList(steps=steps, has_final=(ws / "final.vtu").is_file())
+    return SnapshotList(steps=_snapshot_steps(ws), has_final=(ws / "final.vtu").is_file())
 
 
 @router.get("/{run_id}/field", response_model=FieldBundle)
 def get_field(
     service: ServiceDep,
     run_id: str,
-    step: int = Query(default=-1, description="-1 = final field"),
+    step: int = Query(default=-1, description="-1 = final (or latest snapshot while running)"),
     stride: int = Query(default=0, ge=0, le=16, description="0 = auto-decimate"),
 ) -> FieldBundle:
     """Decimated field bundle (base64 Float32) from a snapshot — the browser
-    never parses raw .vtu or receives more cells than a laptop GPU enjoys."""
+    never parses raw .vtu or receives more cells than a laptop GPU enjoys.
+
+    ``step < 0`` means "final field". While a run is still in progress the final
+    field does not exist yet, so we fall back to the most recent
+    ``snapshot_<n>.vtu`` — the post-view stays populated (streamlines, vortex
+    structures, …) during the run instead of erroring out on a missing
+    ``final.vtu``."""
     ws = _workspace(service, run_id)
-    path = ws / ("final.vtu" if step < 0 else f"snapshot_{step}.vtu")
+    if step < 0:
+        path = ws / "final.vtu"
+        if not path.is_file():
+            latest = max(_snapshot_steps(ws), default=None)
+            if latest is not None:
+                step, path = latest, ws / f"snapshot_{latest}.vtu"
+    else:
+        path = ws / f"snapshot_{step}.vtu"
     if not path.is_file():
         raise HTTPException(status_code=404, detail=f"snapshot not found: {path.name}")
     try:

@@ -74,6 +74,26 @@ def test_snapshots_and_field_bundle(client: TestClient) -> None:
     assert client.get(f"/api/runs/{run_id}/field", params={"step": 999}).status_code == 404
 
 
+def test_field_falls_back_to_latest_snapshot_while_running(client: TestClient) -> None:
+    # While a run is still in progress there is no final.vtu yet; requesting the
+    # final field (step=-1) must fall back to the most recent snapshot so the
+    # post-view stays populated instead of 404-ing on "snapshot not found".
+    run_id = _completed_run(client)
+    ws = client.app.state.service.artifacts.workspace(run_id)  # type: ignore[attr-defined]
+    (ws / "final.vtu").unlink()
+
+    response = client.get(f"/api/runs/{run_id}/field", params={"step": -1})
+    assert response.status_code == 200, response.text
+    bundle = response.json()
+    assert bundle["step"] == 24  # latest snapshot, not the (missing) final
+    assert bundle["source"] == "snapshot_24.vtu"
+
+    # No snapshots at all -> still a clean 404.
+    for snap in ws.glob("snapshot_*.vtu"):
+        snap.unlink()
+    assert client.get(f"/api/runs/{run_id}/field", params={"step": -1}).status_code == 404
+
+
 def test_analysis_endpoint(client: TestClient) -> None:
     run_id = _completed_run(client)
     body = client.get(f"/api/runs/{run_id}/analysis", params={"window": 0.5}).json()
